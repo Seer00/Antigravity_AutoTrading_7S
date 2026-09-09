@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>7-Split AutoTrading System</title>
+    <!-- Google Fonts Inter & Noto Sans KR -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+KR:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0f1115;
+            --card-bg: #161920;
+            --card-border: rgba(255, 255, 255, 0.08);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --primary: #3b82f6;
+            --primary-hover: #2563eb;
+            --success: #10b981;
+            --danger: #ef4444;
+            --danger-hover: #dc2626;
+            --warning: #f59e0b;
+            --terminal-bg: #0b0c10;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: 'Inter', 'Noto Sans KR', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            line-height: 1.5;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        /* 헤더 스타일 */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 25px;
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+        }
+
+        .logo-section {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(135deg, #60a5fa, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.5px;
+        }
+
+        .status-badge {
+            background-color: rgba(245, 158, 11, 0.15);
+            color: var(--warning);
+            padding: 4px 10px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--warning);
+            border-radius: 50%;
+            display: inline-block;
+            animation: blink 1.5s infinite;
+        }
+
+        @keyframes blink {
+            0% { opacity: 0.3; }
+            50% { opacity: 1; }
+            100% { opacity: 0.3; }
+        }
+
+        .btn {
+            padding: 10px 18px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-danger {
+            background-color: var(--danger);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background-color: var(--danger-hover);
+            transform: translateY(-1px);
+        }
+
+        .btn-primary {
+            background-color: var(--primary);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--primary-hover);
+            transform: translateY(-1px);
+        }
+
+        /* 자산 요약 대시보드 */
+        .summary-dashboard {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        .summary-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+
+        .card-label {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .card-value {
+            font-size: 1.6rem;
+            font-weight: 700;
+            color: var(--text-main);
+        }
+
+        .text-up {
+            color: var(--success) !important;
+        }
+
+        .text-down {
+            color: var(--danger) !important;
+        }
+
+        /* 본문 2단 레이아웃 */
+        .main-layout {
+            display: grid;
+            grid-template-columns: 420px 1fr;
+            gap: 20px;
+        }
+
+        .side-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .content-panel {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .panel-card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 22px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+
+        .panel-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 18px;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* 폼 입력 스타일 */
+        .form-group {
+            margin-bottom: 14px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .form-control {
+            width: 100%;
+            background-color: rgba(255,255,255,0.03);
+            border: 1px solid var(--card-border);
+            color: var(--text-main);
+            padding: 10px 12px;
+            border-radius: 8px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-top: 10px;
+            margin-bottom: 15px;
+        }
+
+        .checkbox-group input {
+            width: 16px;
+            height: 16px;
+            accent-color: var(--primary);
+            cursor: pointer;
+        }
+
+        /* 정보/경고 박스 */
+        .info-box {
+            background-color: rgba(59, 130, 246, 0.05);
+            border-left: 4px solid var(--primary);
+            border-radius: 0 8px 8px 0;
+            padding: 12px 15px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 15px;
+        }
+
+        /* 종목별 대시보드 리스트 */
+        .stock-list {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        .stock-item {
+            border: 1px solid var(--card-border);
+            border-radius: 10px;
+            background-color: rgba(255,255,255,0.01);
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .stock-header {
+            padding: 16px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            background-color: rgba(255,255,255,0.02);
+            transition: background-color 0.2s;
+        }
+
+        .stock-header:hover {
+            background-color: rgba(255,255,255,0.04);
+        }
+
+        .stock-info-main {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .stock-name-badge {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .stock-name {
+            font-weight: 600;
+            font-size: 1.05rem;
+        }
+
+        .stock-code {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+        }
+
+        .stock-metrics {
+            display: flex;
+            gap: 30px;
+            align-items: center;
+        }
+
+        .metric-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-end;
+        }
+
+        .metric-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .metric-value {
+            font-weight: 600;
+            font-size: 0.95rem;
+        }
+
+        /* 7 스플릿 단계 진행 인디케이터 바 */
+        .step-indicator {
+            display: flex;
+            gap: 4px;
+            margin-top: 4px;
+        }
+
+        .step-segment {
+            width: 14px;
+            height: 6px;
+            background-color: rgba(255,255,255,0.1);
+            border-radius: 2px;
+        }
+
+        .step-segment.active {
+            background-color: var(--success);
+            box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+        }
+
+        /* 상세 아코디언 콘텐츠 */
+        .stock-details {
+            display: none;
+            padding: 20px;
+            border-top: 1px solid var(--card-border);
+            background-color: rgba(0, 0, 0, 0.1);
+        }
+
+        /* 시뮬레이션 제어부 */
+        .scenario-panel {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background-color: rgba(255,255,255,0.02);
+            border-radius: 8px;
+            margin-bottom: 18px;
+            border: 1px dashed rgba(255, 255, 255, 0.05);
+        }
+
+        .scenario-btns {
+            display: flex;
+            gap: 6px;
+        }
+
+        .btn-scenario {
+            padding: 5px 10px;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            border: 1px solid var(--card-border);
+            background-color: transparent;
+            color: var(--text-muted);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-scenario:hover {
+            color: var(--text-main);
+            border-color: var(--text-muted);
+        }
+
+        .btn-scenario.active {
+            background-color: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        /* 단계 상세 그리드 */
+        .steps-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 10px;
+            margin-bottom: 18px;
+        }
+
+        .step-card {
+            background-color: rgba(255,255,255,0.02);
+            border: 1px solid var(--card-border);
+            border-radius: 8px;
+            padding: 12px 8px;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+        }
+
+        .step-card.active {
+            background-color: rgba(16, 185, 129, 0.04);
+            border-color: rgba(16, 185, 129, 0.3);
+        }
+
+        .step-number {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 500;
+        }
+
+        .step-status {
+            font-size: 0.8rem;
+            font-weight: 600;
+            color: var(--text-muted);
+        }
+
+        .step-card.active .step-status {
+            color: var(--success);
+        }
+
+        .step-price {
+            font-size: 0.85rem;
+            font-weight: 700;
+        }
+
+        .step-qty {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .step-profit {
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+
+        /* 종목별 제어 헤더 */
+        .stock-control-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 48px;
+            height: 24px;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255,255,255,0.1);
+            transition: .4s;
+            border-radius: 24px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: var(--success);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+
+        /* 실시간 로그 터미널 */
+        .terminal-panel {
+            background-color: var(--terminal-bg);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            padding: 15px 20px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+        }
+
+        .terminal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: 8px;
+            margin-bottom: 10px;
+        }
+
+        .terminal-title {
+            font-family: monospace;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .terminal-dot {
+            width: 8px;
+            height: 8px;
+            background-color: var(--success);
+            border-radius: 50%;
+        }
+
+        .btn-clear {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            font-family: monospace;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+
+        .btn-clear:hover {
+            color: var(--text-main);
+        }
+
+        .terminal-body {
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 0.85rem;
+            height: 160px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            color: #38bdf8; /* 스카이블루 */
+            white-space: pre-wrap;
+        }
+
+        .terminal-line {
+            line-break: anywhere;
+        }
+
+        /* 스크롤바 커스텀 */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.1);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255,255,255,0.25);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 헤더 영역 -->
+        <header>
+            <div class="logo-section">
+                <div class="logo-title">7-SPLIT AUTO TRADER</div>
+                <div class="status-badge" id="system-mode-badge">
+                    <span class="status-dot"></span>
+                    <span id="system-mode-text">연결 중...</span>
+                </div>
+            </div>
+            <div>
+                <button class="btn btn-danger" onclick="emergencyLiquidationAll()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    보유 전 종목 긴급 청산
+                </button>
+            </div>
+        </header>
+
+        <!-- 자산 요약 대시보드 -->
+        <div class="summary-dashboard">
+            <div class="summary-card">
+                <span class="card-label">가상 계좌 예수금</span>
+                <span class="card-value" id="asset-deposit">- 원</span>
+            </div>
+            <div class="summary-card">
+                <span class="card-label">가상 계좌 총자산</span>
+                <span class="card-value" id="asset-total">- 원</span>
+            </div>
+            <div class="summary-card">
+                <span class="card-label">스플릿 총 평가 손익</span>
+                <span class="card-value" id="asset-profit">- 원</span>
+            </div>
+            <div class="summary-card">
+                <span class="card-label">스플릿 총 수익률</span>
+                <span class="card-value" id="asset-rate">-%</span>
+            </div>
+        </div>
+
+        <!-- 본문 구조 -->
+        <div class="main-layout">
+            <!-- 좌측 패널 (종목 등록) -->
+            <div class="side-panel">
+                <div class="panel-card">
+                    <h3 class="panel-title">분할 투자 종목 설정 등록</h3>
+                    <form id="config-form" onsubmit="registerStock(event)">
+                        <div class="form-group">
+                            <label class="form-label" for="stock_code">종목코드</label>
+                            <input class="form-control" type="text" id="stock_code" placeholder="예: 005930" required maxlength="6">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="stock_name">종목명</label>
+                            <input class="form-control" type="text" id="stock_name" placeholder="예: 삼성전자" required>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label" for="first_entry_amount">단계별 투입 금액 (원)</label>
+                            <input class="form-control" type="number" id="first_entry_amount" value="1000000" required step="1000">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label" for="drop_trigger_pct">추가매수 하락폭 (%)</label>
+                                <input class="form-control" type="number" id="drop_trigger_pct" value="2.0" required step="0.1">
+                            </div>
+                            <div class="form-group">
+                                <label class="form-label" for="target_profit_pct">목표 수익률 (%)</label>
+                                <input class="form-control" type="number" id="target_profit_pct" value="3.0" required step="0.1">
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label class="form-label" for="total_steps">최대 스플릿 단계</label>
+                                <input class="form-control" type="number" id="total_steps" value="7" min="1" max="7" required>
+                            </div>
+                        </div>
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="reinvest_enabled" checked>
+                            <label class="form-label" for="reinvest_enabled" style="margin: 0; cursor: pointer;">매도 완료 시 해당 단계 재매수 대기</label>
+                        </div>
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                            종목 감시 등록하기
+                        </button>
+                    </form>
+                    
+                    <div class="info-box">
+                        <strong>💡 평단가 합산 안내</strong>
+                        <p style="margin-top: 4px; font-size: 0.8rem; line-height: 1.4;">
+                            실제 증권사 잔고는 1개의 통합 평균단가로 노출되나, 본 프로그램은 각 스플릿별 진입 가격을 독립적으로 추적하여 하락 시 추가 매수, 반등 시 개별 매도를 실현합니다.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 우측 패널 (종목 감시 목록) -->
+            <div class="content-panel">
+                <div class="panel-card" style="flex: 1;">
+                    <h3 class="panel-title">세븐스플릿 종목 감시 현황</h3>
+                    <div class="stock-list" id="stock-list-container">
+                        <!-- 동적으로 아이템 생성됨 -->
+                        <div style="text-align: center; color: var(--text-muted); padding: 40px 0;">
+                            등록된 감시 종목이 없습니다. 좌측에서 등록해 주세요.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 하단 실시간 로그 터미널 -->
+        <div class="terminal-panel">
+            <div class="terminal-header">
+                <div class="terminal-title">
+                    <span class="terminal-dot"></span>
+                    SYSTEM REAL-TIME EVENTS LOG
+                </div>
+                <button class="btn-clear" onclick="clearLogs()">CLEAR CONSOLE</button>
+            </div>
+            <div class="terminal-body" id="log-terminal">
+                <!-- SSE 로그 라인이 출력됨 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 백엔드 주소 (로컬)
+        const BASE_URL = window.location.origin;
+
+        // 아코디언 상태 기억
+        const accordionStates = {};
+
+        // 시스템 상태 정보 불러오기
+        async function fetchSystemStatus() {
+            try {
+                const res = await fetch(`${BASE_URL}/api/status`);
+                const data = await res.json();
+                
+                const textEl = document.getElementById('system-mode-text');
+                const badgeEl = document.getElementById('system-mode-badge');
+                
+                if (data.simulation_mode) {
+                    textEl.textContent = 'MOCK SIMULATION 구동 중';
+                    badgeEl.style.backgroundColor = 'rgba(245, 158, 11, 0.12)';
+                    badgeEl.style.color = 'var(--warning)';
+                    badgeEl.style.borderColor = 'rgba(245, 158, 11, 0.3)';
+                    document.querySelector('.status-dot').style.backgroundColor = 'var(--warning)';
+                } else {
+                    textEl.textContent = `실전 API 연동 (계좌: ${data.account_no})`;
+                    badgeEl.style.backgroundColor = 'rgba(16, 185, 129, 0.12)';
+                    badgeEl.style.color = 'var(--success)';
+                    badgeEl.style.borderColor = 'rgba(16, 185, 129, 0.3)';
+                    document.querySelector('.status-dot').style.backgroundColor = 'var(--success)';
+                }
+            } catch (err) {
+                console.error('시스템 상태 가져오기 실패:', err);
+            }
+        }
+
+        // 잔고 및 자산 현황 갱신
+        async function updateBalance() {
+            try {
+                const res = await fetch(`${BASE_URL}/api/balance`);
+                const data = await res.json();
+                
+                if (data.success) {
+                    document.getElementById('asset-deposit').textContent = `${Math.floor(data.deposit).toLocaleString()} 원`;
+                    document.getElementById('asset-total').textContent = `${Math.floor(data.total_asset).toLocaleString()} 원`;
+                    
+                    // 총 평가손익 및 수익률 종합 연산
+                    let totalBuyAmt = 0;
+                    let totalEvalAmt = 0;
+                    data.holdings.forEach(h => {
+                        totalBuyAmt += h.buy_price * h.quantity;
+                        totalEvalAmt += h.current_price * h.quantity;
+                    });
+                    
+                    const evalProfit = totalEvalAmt - totalBuyAmt;
+                    const profitRate = totalBuyAmt > 0 ? (evalProfit / totalBuyAmt * 100) : 0.0;
+                    
+                    const profitEl = document.getElementById('asset-profit');
+                    const rateEl = document.getElementById('asset-rate');
+                    
+                    profitEl.textContent = `${Math.floor(evalProfit).toLocaleString()} 원`;
+                    rateEl.textContent = `${profitRate.toFixed(2)} %`;
+                    
+                    if (evalProfit > 0) {
+                        profitEl.className = 'card-value text-up';
+                        rateEl.className = 'card-value text-up';
+                    } else if (evalProfit < 0) {
+                        profitEl.className = 'card-value text-down';
+                        rateEl.className = 'card-value text-down';
+                    } else {
+                        profitEl.className = 'card-value';
+                        rateEl.className = 'card-value';
+                    }
+                }
+            } catch (err) {
+                console.error('잔고 조회 실패:', err);
+            }
+        }
+
+        // 감시 종목 목록 및 단계 상태 조회 갱신
+        async function updateConfigList() {
+            try {
+                const res = await fetch(`${BASE_URL}/api/configs`);
+                const configs = await res.json();
+                
+                const container = document.getElementById('stock-list-container');
+                if (configs.length === 0) {
+                    container.innerHTML = `
+                        <div style="text-align: center; color: var(--text-muted); padding: 40px 0;">
+                            등록된 감시 종목이 없습니다. 좌측에서 등록해 주세요.
+                        </div>`;
+                    return;
+                }
+                
+                let html = '';
+                configs.forEach(cfg => {
+                    const isOpen = accordionStates[cfg.id] || false;
+                    const displayStyle = isOpen ? 'block' : 'none';
+                    const activeSegments = cfg.active_step_count;
+                    
+                    // 스플릿 인디케이터 세그먼트 생성
+                    let segmentsHtml = '';
+                    for (let i = 1; i <= cfg.total_steps; i++) {
+                        const isActive = i <= activeSegments;
+                        segmentsHtml += `<div class="step-segment ${isActive ? 'active' : ''}"></div>`;
+                    }
+
+                    // 종목 카드 평가금액 손익 클래스
+                    const profitClass = cfg.eval_profit > 0 ? 'text-up' : (cfg.eval_profit < 0 ? 'text-down' : '');
+                    const ratePrefix = cfg.eval_profit > 0 ? '+' : '';
+
+                    html += `
+                    <div class="stock-item">
+                        <!-- 헤더 정보 -->
+                        <div class="stock-header" onclick="toggleAccordion(${cfg.id})">
+                            <div class="stock-info-main">
+                                <div class="stock-name-badge">
+                                    <span class="stock-name">${cfg.stock_name}</span>
+                                    <span class="stock-code">${cfg.stock_code}</span>
+                                </div>
+                                <div style="margin-left: 10px;">
+                                    <span class="metric-label" style="font-size: 0.7rem; color: var(--text-muted);">단계 진행현황</span>
+                                    <div class="step-indicator">${segmentsHtml}</div>
+                                </div>
+                            </div>
+                            <div class="stock-metrics">
+                                <div class="metric-group">
+                                    <span class="metric-label">현재가</span>
+                                    <span class="metric-value">${cfg.current_price.toLocaleString()}원</span>
+                                </div>
+                                <div class="metric-group">
+                                    <span class="metric-label">총보유수량</span>
+                                    <span class="metric-value">${cfg.holdings_qty.toLocaleString()}주</span>
+                                </div>
+                                <div class="metric-group">
+                                    <span class="metric-label">실제평단가</span>
+                                    <span class="metric-value">${Math.floor(cfg.avg_price).toLocaleString()}원</span>
+                                </div>
+                                <div class="metric-group">
+                                    <span class="metric-label">평가손익(율)</span>
+                                    <span class="metric-value ${profitClass}">${Math.floor(cfg.eval_profit).toLocaleString()}원 (${ratePrefix}${cfg.profit_rate.toFixed(2)}%)</span>
+                                </div>
+                                <div>
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" style="transform: ${isOpen ? 'rotate(180deg)' : 'rotate(0)'}; transition: transform 0.2s;">
+                                        <polyline points="6 9 12 15 18 9"></polyline>
+                                    </svg>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- 상세 스플릿 단계 정보 -->
+                        <div class="stock-details" id="details-${cfg.id}" style="display: ${displayStyle}">
+                            
+                            <!-- 시뮬레이션 환경 주가 변동 조작 컨트롤 -->
+                            <div class="scenario-panel">
+                                <div style="display: flex; flex-direction: column; gap: 2px;">
+                                    <span style="font-size: 0.8rem; font-weight: 600;">📈 시뮬레이터 주가 변동 조작</span>
+                                    <span style="font-size: 0.7rem; color: var(--text-muted);">종목의 시뮬레이션 시세 등락 방향을 지정합니다.</span>
+                                </div>
+                                <div class="scenario-btns">
+                                    <button class="btn-scenario ${cfg.scenario === 'UP' ? 'active' : ''}" onclick="setScenario(event, '${cfg.stock_code}', 'UP')">상승(UP)</button>
+                                    <button class="btn-scenario ${cfg.scenario === 'DOWN' ? 'active' : ''}" onclick="setScenario(event, '${cfg.stock_code}', 'DOWN')">하락(DOWN)</button>
+                                    <button class="btn-scenario ${cfg.scenario === 'SIDE' ? 'active' : ''}" onclick="setScenario(event, '${cfg.stock_code}', 'SIDE')">횡보(SIDE)</button>
+                                    <button class="btn-scenario ${cfg.scenario === 'RANDOM' ? 'active' : ''}" onclick="setScenario(event, '${cfg.stock_code}', 'RANDOM')">무작위</button>
+                                </div>
+                            </div>
+
+                            <!-- 단계별 정보 그리드 -->
+                            <div class="steps-grid">
+                                ${cfg.steps.map(step => {
+                                    const isActive = step.status === 'HOLD';
+                                    const stepProfitClass = step.eval_profit > 0 ? 'text-up' : (step.eval_profit < 0 ? 'text-down' : '');
+                                    const stepRatePrefix = step.eval_profit > 0 ? '+' : '';
+                                    return `
+                                    <div class="step-card ${isActive ? 'active' : ''}">
+                                        <div class="step-number">넘버 ${step.step}</div>
+                                        <div class="step-status">${step.status === 'HOLD' ? '보유 중' : (step.status === 'WAIT' ? '대기' : '매도완료')}</div>
+                                        <div class="step-price">${isActive ? step.buy_price.toLocaleString() + '원' : '-'}</div>
+                                        <div class="step-qty">${isActive ? step.quantity + '주' : '-'}</div>
+                                        <div class="step-profit ${stepProfitClass}">${isActive ? stepRatePrefix + step.profit_rate.toFixed(1) + '%' : '-'}</div>
+                                    </div>
+                                    `;
+                                }).join('')}
+                            </div>
+
+                            <!-- 제어 스위치 및 버튼 -->
+                            <div class="stock-control-bar">
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <label class="toggle-switch">
+                                        <input type="checkbox" ${cfg.is_active ? 'checked' : ''} onchange="toggleActive(${cfg.id})">
+                                        <span class="slider"></span>
+                                    </label>
+                                    <span style="font-size: 0.85rem; font-weight: 500; color: ${cfg.is_active ? 'var(--text-main)' : 'var(--text-muted)'}">
+                                        ${cfg.is_active ? '자동 거래 가동 중' : '자동 거래 일시 중단'}
+                                    </span>
+                                </div>
+                                <div style="display: flex; gap: 8px;">
+                                    <button class="btn" style="background-color: rgba(239,68,68,0.15); color: var(--danger); font-size: 0.8rem; padding: 6px 12px;" onclick="emergencyLiquidationOne(${cfg.id}, '${cfg.stock_name}')">
+                                        이 종목만 긴급 청산
+                                    </button>
+                                    <button class="btn" style="background-color: rgba(255,255,255,0.05); color: var(--text-muted); font-size: 0.8rem; padding: 6px 12px;" onclick="deleteStock(${cfg.id})">
+                                        설정 삭제
+                                    </button>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+                    `;
+                });
+                container.innerHTML = html;
+            } catch (err) {
+                console.error('설정 목록 갱신 실패:', err);
+            }
+        }
+
+        // 아코디언 토글
+        function toggleAccordion(id) {
+            accordionStates[id] = !accordionStates[id];
+            const el = document.getElementById(`details-${id}`);
+            if (el) {
+                el.style.display = accordionStates[id] ? 'block' : 'none';
+            }
+            updateConfigList();
+        }
+
+        // 신규 종목 등록
+        async function registerStock(event) {
+            event.preventDefault();
+            const stock_code = document.getElementById('stock_code').value;
+            const stock_name = document.getElementById('stock_name').value;
+            const first_entry_amount = parseFloat(document.getElementById('first_entry_amount').value);
+            const drop_trigger_pct = parseFloat(document.getElementById('drop_trigger_pct').value);
+            const target_profit_pct = parseFloat(document.getElementById('target_profit_pct').value);
+            const total_steps = parseInt(document.getElementById('total_steps').value);
+            const reinvest_enabled = document.getElementById('reinvest_enabled').checked;
+
+            try {
+                const res = await fetch(`${BASE_URL}/api/configs`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        stock_code,
+                        stock_name,
+                        first_entry_amount,
+                        drop_trigger_pct,
+                        target_profit_pct,
+                        total_steps,
+                        reinvest_enabled
+                    })
+                });
+                
+                const data = await res.json();
+                if (res.ok) {
+                    alert('성공적으로 등록되어 감시가 시작되었습니다.');
+                    document.getElementById('config-form').reset();
+                    updateConfigList();
+                } else {
+                    alert(`등록 실패: ${data.detail || '알 수 없는 오류'}`);
+                }
+            } catch (err) {
+                alert('등록 중 네트워크 오류가 발생했습니다.');
+            }
+        }
+
+        // 설정 삭제
+        async function deleteStock(id) {
+            if (!confirm('이 종목의 설정을 정말로 삭제하시겠습니까? (보유 중인 스플릿 상태와 이력 데이터가 전부 삭제됩니다.)')) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`${BASE_URL}/api/configs/${id}`, { method: 'DELETE' });
+                if (res.ok) {
+                    updateConfigList();
+                } else {
+                    const data = await res.json();
+                    alert(`삭제 실패: ${data.detail}`);
+                }
+            } catch (err) {
+                alert('삭제 중 오류가 발생했습니다.');
+            }
+        }
+
+        // 감시 활성 토글
+        async function toggleActive(id) {
+            try {
+                const res = await fetch(`${BASE_URL}/api/configs/${id}/toggle`, { method: 'POST' });
+                if (res.ok) {
+                    updateConfigList();
+                }
+            } catch (err) {
+                console.error('감시 토글 실패:', err);
+            }
+        }
+
+        // 시뮬레이터 주가 등락 시나리오 지정
+        async function setScenario(event, stock_code, scenario) {
+            event.stopPropagation(); // 헤더 아코디언 토글 방지
+            try {
+                const res = await fetch(`${BASE_URL}/api/mock/scenario`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ stock_code, scenario })
+                });
+                if (res.ok) {
+                    updateConfigList();
+                }
+            } catch (err) {
+                console.error('시나리오 지정 실패:', err);
+            }
+        }
+
+        // 단일 종목 긴급 청산
+        async function emergencyLiquidationOne(id, name) {
+            if (!confirm(`⚠️ 경고! [${name}] 종목의 모든 단계 물량을 즉시 시장가로 전량 매도하고 초기화하시겠습니까?`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`${BASE_URL}/api/emergency/${id}`, { method: 'POST' });
+                const data = await res.json();
+                alert(data.message);
+                updateConfigList();
+                updateBalance();
+            } catch (err) {
+                alert('긴급 청산 요청 중 오류가 발생했습니다.');
+            }
+        }
+
+        // 전체 종목 긴급 청산
+        async function emergencyLiquidationAll() {
+            if (!confirm(`🚨🚨 긴급 경고!! 현재 감시 및 보유 중인 모든 종목의 보유 물량을 예외 없이 즉시 시장가로 일괄 청산(전량 매도)하시겠습니까?`)) {
+                return;
+            }
+
+            try {
+                const res = await fetch(`${BASE_URL}/api/emergency`, { method: 'POST' });
+                const data = await res.json();
+                alert(data.message);
+                updateConfigList();
+                updateBalance();
+            } catch (err) {
+                alert('전체 긴급 청산 요청 중 오류가 발생했습니다.');
+            }
+        }
+
+        // 실시간 터미널 로그 스트리밍 (SSE)
+        function startLogStreaming() {
+            const terminal = document.getElementById('log-terminal');
+            const eventSource = new EventSource(`${BASE_URL}/api/logs`);
+            
+            eventSource.onmessage = function(event) {
+                const line = document.createElement('div');
+                line.className = 'terminal-line';
+                line.textContent = event.data;
+                
+                // 경고나 에러 로그의 경우 스타일링 부여
+                if (event.data.includes('[ERROR]')) {
+                    line.style.color = 'var(--danger)';
+                } else if (event.data.includes('[WARNING]') || event.data.includes('[트리거 발생]')) {
+                    line.style.color = 'var(--warning)';
+                } else if (event.data.includes('[매수 체결') || event.data.includes('[매도 체결')) {
+                    line.style.color = 'var(--success)';
+                }
+                
+                terminal.appendChild(line);
+                
+                // 자동 스크롤 다운
+                terminal.scrollTop = terminal.scrollHeight;
+            };
+
+            eventSource.onerror = function() {
+                console.error("SSE 연결 유실. 재시도 중...");
+            };
+        }
+
+        // 터미널 로그 지우기
+        function clearLogs() {
+            document.getElementById('log-terminal').innerHTML = '';
+        }
+
+        // 초기 기동
+        window.addEventListener('DOMContentLoaded', async () => {
+            await fetchSystemStatus();
+            await updateBalance();
+            await updateConfigList();
+            startLogStreaming();
+            
+            // 2초 간격으로 정보 주기적 갱신
+            setInterval(async () => {
+                await updateBalance();
+                await updateConfigList();
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
