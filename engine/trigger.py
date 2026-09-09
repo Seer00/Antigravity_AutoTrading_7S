@@ -195,6 +195,7 @@ class TriggerEngine:
                 # [로직 1] 매도 감시
                 # 보유(HOLD) 상태인 모든 단계를 검사하여 목표수익률 도달 시 매도
                 # ----------------------------------------------------
+                sold_any_in_this_tick = False
                 for state in states:
                     if state.status == "HOLD":
                         buy_price = state.buy_price
@@ -217,6 +218,7 @@ class TriggerEngine:
                             # 매도 주문 전송
                             order_res = await self.kiwoom.place_order(stock_code, "SELL", 0, int(qty))
                             if order_res.get("success"):
+                                sold_any_in_this_tick = True
                                 exec_price = order_res.get("executed_price", current_price)
                                 exec_qty = order_res.get("executed_quantity", qty)
                                 
@@ -256,6 +258,10 @@ class TriggerEngine:
                                     f"[매도 실패] {config.stock_name} {state.step}단계 주문 실패: {order_res.get('message')}",
                                     "ERROR"
                                 )
+
+                # 이번 틱에서 매도가 발생했다면 즉시 재매수 로직으로 진입하지 않고 다음 시세 틱까지 대기
+                if sold_any_in_this_tick:
+                    return
 
                 # ----------------------------------------------------
                 # [로직 2] 매수 감시
