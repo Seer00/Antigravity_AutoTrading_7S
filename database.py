@@ -32,6 +32,10 @@ class SplitConfig(Base):
     target_profit_pct = Column(Float, nullable=False, default=3.0)         # 목표 수익률 (%)
     reinvest_enabled = Column(Boolean, default=True, nullable=False)       # 매도 완료 시 해당 단계 재투자(대기 상태 복귀) 여부
     is_active = Column(Boolean, default=True, nullable=False)               # 자동 감시 활성화 여부
+    trade_mode = Column(String(20), default="AUTO", nullable=False)         # 매매모드: AUTO (자동매매), MANUAL (수동매매)
+    buy_order_type = Column(String(20), default="MARKET", nullable=False)   # 매수 주문방식: MARKET (시장가), LIMIT (지정가)
+    sell_order_type = Column(String(20), default="MARKET", nullable=False)  # 매도 주문방식: MARKET (시장가), LIMIT (지정가)
+    step_settings = Column(String(2000), nullable=True)                    # 차수별 개별 설정 JSON (하락률, 매수금액, 목표수익률)
     created_at = Column(DateTime, default=datetime.now)
 
     # 1:N 관계 설정 (상태 테이블 및 주문 이력 테이블)

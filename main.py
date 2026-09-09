@@ -218,6 +218,10 @@ async def get_configs(db: Session = Depends(get_db)):
             "target_profit_pct": cfg.target_profit_pct,
             "reinvest_enabled": cfg.reinvest_enabled,
             "is_active": cfg.is_active,
+            "trade_mode": getattr(cfg, "trade_mode", "AUTO"),
+            "buy_order_type": getattr(cfg, "buy_order_type", "MARKET"),
+            "sell_order_type": getattr(cfg, "sell_order_type", "MARKET"),
+            "step_settings": getattr(cfg, "step_settings", None),
             "current_price": current_price,
             "holdings_qty": holdings_qty,
             "avg_price": round(avg_price, 2),
@@ -239,16 +243,18 @@ async def add_config(
     drop_trigger_pct: float = Body(2.0, embed=True),
     target_profit_pct: float = Body(3.0, embed=True),
     reinvest_enabled: bool = Body(True, embed=True),
+    trade_mode: str = Body("AUTO", embed=True),
+    buy_order_type: str = Body("MARKET", embed=True),
+    sell_order_type: str = Body("MARKET", embed=True),
+    step_settings: str = Body(None, embed=True),
     db: Session = Depends(get_db)
 ):
     """
     새로운 종목 분할 투자 설정을 등록합니다.
     """
-    # 6자리 포맷 맞춤 (앞에 0 채우기)
     stock_code = stock_code.strip().zfill(6)
     stock_name = stock_name.strip()
 
-    # 이미 동일 종목 코드가 있는지 확인
     exists = db.query(SplitConfig).filter(SplitConfig.stock_code == stock_code).first()
     if exists:
         raise HTTPException(status_code=400, detail="이미 등록된 종목 코드입니다.")
@@ -262,12 +268,15 @@ async def add_config(
             drop_trigger_pct=drop_trigger_pct,
             target_profit_pct=target_profit_pct,
             reinvest_enabled=reinvest_enabled,
+            trade_mode=trade_mode,
+            buy_order_type=buy_order_type,
+            sell_order_type=sell_order_type,
+            step_settings=step_settings,
             is_active=True
         )
         db.add(new_cfg)
-        db.flush()  # ID 확보
+        db.flush()
 
-        # 종목 등록 시 해당 단계(1~N) 상태도 WAIT로 생성
         for i in range(1, total_steps + 1):
             state = SplitState(
                 config_id=new_cfg.id,
@@ -279,14 +288,80 @@ async def add_config(
             db.add(state)
         
         db.commit()
-        log_system_event(f"새 종목 설정 등록: {stock_name}({stock_code}) {total_steps}단계", "INFO")
+        log_system_event(f"새 종목 설정 등록: {stock_name}({stock_code}) {total_steps}단계 (모드: {trade_mode})", "INFO")
         
-        # 엔진 감시 목록 갱신
         engine = app_state.get("engine")
         if engine:
             await engine.reload_configs()
 
         return {"success": True, "message": "종목 설정이 성공적으로 등록되었습니다."}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/configs/{config_id}")
+async def update_config(
+    config_id: int,
+    total_steps: int = Body(7, embed=True),
+    first_entry_amount: float = Body(..., embed=True),
+    drop_trigger_pct: float = Body(2.0, embed=True),
+    target_profit_pct: float = Body(3.0, embed=True),
+    reinvest_enabled: bool = Body(True, embed=True),
+    trade_mode: str = Body("AUTO", embed=True),
+    buy_order_type: str = Body("MARKET", embed=True),
+    sell_order_type: str = Body("MARKET", embed=True),
+    step_settings: str = Body(None, embed=True),
+    db: Session = Depends(get_db)
+):
+    """
+    등록된 종목의 매매전략 및 차수별 세부 조건을 수정합니다.
+    """
+    cfg = db.query(SplitConfig).filter(SplitConfig.id == config_id).first()
+    if not cfg:
+        raise HTTPException(status_code=404, detail="설정을 찾을 수 없습니다.")
+
+    try:
+        old_steps = cfg.total_steps
+        cfg.total_steps = total_steps
+        cfg.first_entry_amount = first_entry_amount
+        cfg.drop_trigger_pct = drop_trigger_pct
+        cfg.target_profit_pct = target_profit_pct
+        cfg.reinvest_enabled = reinvest_enabled
+        cfg.trade_mode = trade_mode
+        cfg.buy_order_type = buy_order_type
+        cfg.sell_order_type = sell_order_type
+        cfg.step_settings = step_settings
+
+        # 단계 수(total_steps) 변경 시 SplitState 갱신
+        if total_steps > old_steps:
+            for i in range(old_steps + 1, total_steps + 1):
+                state = SplitState(
+                    config_id=cfg.id,
+                    step=i,
+                    status="WAIT",
+                    buy_price=0.0,
+                    quantity=0.0
+                )
+                db.add(state)
+        elif total_steps < old_steps:
+            # 삭제할 단계 중 WAIT 상태인 것만 삭제
+            extra_states = db.query(SplitState).filter(
+                SplitState.config_id == cfg.id,
+                SplitState.step > total_steps,
+                SplitState.status == "WAIT"
+            ).all()
+            for es in extra_states:
+                db.delete(es)
+
+        db.commit()
+        log_system_event(f"종목 전략 수정 완료: {cfg.stock_name}({cfg.stock_code}) - {total_steps}단계, 모드: {trade_mode}", "INFO")
+
+        engine = app_state.get("engine")
+        if engine:
+            await engine.reload_configs()
+
+        return {"success": True, "message": "종목 매매전략이 정상적으로 수정되었습니다."}
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

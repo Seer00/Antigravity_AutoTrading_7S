@@ -6,6 +6,7 @@
 """
 
 import asyncio
+import json
 import logging
 from datetime import datetime
 from database import SessionLocal, SplitConfig, SplitState, OrderLog, EmergencyLog
@@ -151,10 +152,26 @@ class TriggerEngine:
                 if not config:
                     return
 
+                # 수동매매 모드인 경우 자동 트리거 매수/매도를 실행하지 않음
+                if getattr(config, "trade_mode", "AUTO") == "MANUAL":
+                    return
+
                 # 이 종목의 1~N단계 상태 데이터 로드
                 states = db.query(SplitState).filter(SplitState.config_id == config.id).order_by(SplitState.step).all()
                 if not states:
                     return
+
+                # 차수별 세부 설정(step_settings) 파싱
+                step_map = {}
+                if getattr(config, "step_settings", None):
+                    try:
+                        parsed = json.loads(config.step_settings)
+                        for item in parsed:
+                            st = item.get("step")
+                            if st:
+                                step_map[st] = item
+                    except Exception as pe:
+                        logger.error(f"step_settings 파싱 오류: {pe}")
 
                 # ----------------------------------------------------
                 # [로직 1] 매도 감시
@@ -168,25 +185,25 @@ class TriggerEngine:
                         # 수익률 계산
                         profit_rate = ((current_price - buy_price) / buy_price) * 100
                         
-                        if profit_rate >= config.target_profit_pct:
+                        # 해당 차수 전용 목표수익률 (설정 없으면 기본 target_profit_pct)
+                        st_cfg = step_map.get(state.step, {})
+                        target_profit = float(st_cfg.get("profit_pct", config.target_profit_pct))
+
+                        if profit_rate >= target_profit:
                             log_system_event(
                                 f"[트리거 발생] {config.stock_name}({stock_code}) {state.step}단계 목표 수익률 도달! "
-                                f"(매수가: {buy_price}원 -> 현재가: {current_price}원, 수익률: {profit_rate:.2f}%)",
+                                f"(매수가: {buy_price}원 -> 현재가: {current_price}원, 수익률: {profit_rate:.2f}%, 목표: {target_profit:.1f}%)",
                                 "INFO"
                             )
                             
                             # 매도 주문 전송
                             order_res = await self.kiwoom.place_order(stock_code, "SELL", 0, int(qty))
                             if order_res.get("success"):
-                                # 체결 데이터 갱신 (시뮬레이터는 즉시 체결 가격이 나오지만, 실제 REST는 비동기 처리)
-                                # 시뮬레이터 혹은 실전에서 반환된 체결값 우선 반영
                                 exec_price = order_res.get("executed_price", current_price)
                                 exec_qty = order_res.get("executed_quantity", qty)
                                 
-                                # 상태 업데이트
                                 state.status = "SOLD"
                                 
-                                # 주문 로그 저장
                                 order_log = OrderLog(
                                     config_id=config.id,
                                     step=state.step,
@@ -206,7 +223,6 @@ class TriggerEngine:
                                     "INFO"
                                 )
                                 
-                                # 재매수 허용 여부에 따라 대기 상태 복구
                                 if config.reinvest_enabled:
                                     state.status = "WAIT"
                                     state.buy_price = 0.0
@@ -228,21 +244,22 @@ class TriggerEngine:
                 # 1단계가 대기(WAIT) 상태인 경우 -> 즉시 진입
                 first_step = states[0]
                 if first_step.status == "WAIT":
+                    st_cfg = step_map.get(1, {})
+                    entry_amt = float(st_cfg.get("buy_amount", config.first_entry_amount))
+
                     log_system_event(
-                        f"[트리거 발생] {config.stock_name}({stock_code}) 1단계 최초 진입 시도. 현재가: {current_price}원",
+                        f"[트리거 발생] {config.stock_name}({stock_code}) 1단계 최초 진입 시도. 현재가: {current_price}원 (투입금액: {entry_amt:,.0f}원)",
                         "INFO"
                     )
                     
-                    # 1단계 투입 금액 기준으로 수량 계산 (소수점 절사)
-                    buy_qty = int(config.first_entry_amount // current_price)
+                    buy_qty = int(entry_amt // current_price)
                     if buy_qty <= 0:
                         log_system_event(
-                            f"[진입 실패] 1단계 투입금액({config.first_entry_amount}원)이 현재 주가({current_price}원)보다 적어 1주도 살 수 없습니다.",
+                            f"[진입 실패] 1단계 투입금액({entry_amt}원)이 현재 주가({current_price}원)보다 적어 1주도 살 수 없습니다.",
                             "WARNING"
                         )
                         return
                     
-                    # 매수 주문
                     order_res = await self.kiwoom.place_order(stock_code, "BUY", 0, buy_qty)
                     if order_res.get("success"):
                         exec_price = order_res.get("executed_price", current_price)
@@ -277,7 +294,6 @@ class TriggerEngine:
                     return
 
                 # 1단계가 이미 HOLD 상태인 경우, 추가 하락 분할 매수 감시
-                # 보유(HOLD) 상태인 가장 높은 단계를 찾음
                 highest_hold_step = None
                 for state in states:
                     if state.status == "HOLD":
@@ -286,27 +302,25 @@ class TriggerEngine:
                 if highest_hold_step:
                     current_step_num = highest_hold_step.step
                     
-                    # 최대 단계(N)에 도달했는지 확인
                     if current_step_num < config.total_steps:
-                        next_step = states[current_step_num] # index = step (0-based이므로 step 번호와 동일)
+                        next_step = states[current_step_num] # index = step
                         
-                        # 다음 단계가 대기(WAIT) 상태인 경우에만 추가 진입
                         if next_step.status == "WAIT":
                             prev_buy_price = highest_hold_step.buy_price
-                            
-                            # 직전 단계 매수가 대비 하락률 계산
                             drop_rate = ((current_price - prev_buy_price) / prev_buy_price) * 100
                             
-                            # 하락 트리거 충족 시
-                            if drop_rate <= -config.drop_trigger_pct:
+                            next_st_cfg = step_map.get(next_step.step, {})
+                            drop_trigger = float(next_st_cfg.get("drop_pct", config.drop_trigger_pct))
+                            entry_amt = float(next_st_cfg.get("buy_amount", config.first_entry_amount))
+
+                            if drop_rate <= -drop_trigger:
                                 log_system_event(
-                                    f"[트리거 발생] {config.stock_name}({stock_code}) 추가 매수 하락 트리거 도달! "
-                                    f"(직전단계 {current_step_num}층 매수가: {prev_buy_price}원 -> 현재가: {current_price}원, 등락률: {drop_rate:.2f}%)",
+                                    f"[트리거 발생] {config.stock_name}({stock_code}) {next_step.step}단계 추가 매수 하락 트리거 도달! "
+                                    f"(직전 {current_step_num}단계 매수가: {prev_buy_price}원 -> 현재가: {current_price}원, 등락률: {drop_rate:.2f}%, 기준: -{drop_trigger:.1f}%)",
                                     "INFO"
                                 )
                                 
-                                # 다음 단계도 최초 진입액과 동일하게 수량 계산
-                                buy_qty = int(config.first_entry_amount // current_price)
+                                buy_qty = int(entry_amt // current_price)
                                 if buy_qty <= 0:
                                     log_system_event(
                                         f"[추가매수 실패] {next_step.step}단계 투입금액이 주가보다 적어 1주도 살 수 없습니다.",
