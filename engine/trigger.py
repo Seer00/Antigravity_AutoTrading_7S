@@ -15,6 +15,7 @@ logger = logging.getLogger("TriggerEngine")
 
 # 대시보드로 실시간 로그를 전달하기 위한 전역 큐
 system_log_queue = asyncio.Queue()
+execution_log_queue = asyncio.Queue()
 
 def log_system_event(message: str, level: str = "INFO"):
     """
@@ -30,12 +31,29 @@ def log_system_event(message: str, level: str = "INFO"):
     elif level == "ERROR":
         logger.error(message)
         
-    # 비동기 루프 내에서 안전하게 넣을 수 있도록 큐에 등록 (asyncio가 구동 중일 때 사용)
     try:
         loop = asyncio.get_running_loop()
         loop.call_soon_threadsafe(system_log_queue.put_nowait, formatted_msg)
     except RuntimeError:
-        # 이벤트 루프가 아직 생성되지 않았거나 끝난 경우 무시
+        pass
+
+
+def log_execution_event(time_str: str, stock_name: str, order_type: str, price: float, qty: float, note: str = "자동"):
+    """
+    매수/매도 체결 발생 시 체결 전용 큐에 데이터를 적재합니다.
+    """
+    exec_data = {
+        "time": time_str,
+        "stock_name": stock_name,
+        "order_type": "매수" if order_type == "BUY" else "매도",
+        "price": price,
+        "qty": qty,
+        "note": note
+    }
+    try:
+        loop = asyncio.get_running_loop()
+        loop.call_soon_threadsafe(execution_log_queue.put_nowait, exec_data)
+    except RuntimeError:
         pass
 
 
@@ -217,11 +235,13 @@ class TriggerEngine:
                                 )
                                 db.add(order_log)
                                 
+                                now_str = datetime.now().strftime("%H:%M:%S")
                                 log_system_event(
                                     f"[매도 체결 완료] {config.stock_name} {state.step}단계 매도 체결! "
                                     f"수량: {exec_qty}주, 단가: {exec_price}원",
                                     "INFO"
                                 )
+                                log_execution_event(now_str, config.stock_name, "SELL", exec_price, exec_qty, "자동")
                                 
                                 if config.reinvest_enabled:
                                     state.status = "WAIT"
@@ -284,11 +304,13 @@ class TriggerEngine:
                         db.add(order_log)
                         db.commit()
                         
+                        now_str = datetime.now().strftime("%H:%M:%S")
                         log_system_event(
                             f"[매수 체결 완료] {config.stock_name} 1단계 진입 성공! "
                             f"수량: {exec_qty}주, 단가: {exec_price}원 (총액: {exec_price * exec_qty:,.0f}원)",
                             "INFO"
                         )
+                        log_execution_event(now_str, config.stock_name, "BUY", exec_price, exec_qty, "자동")
                     else:
                         log_system_event(f"[매수 실패] {config.stock_name} 1단계 주문 실패: {order_res.get('message')}", "ERROR")
                     return
@@ -352,11 +374,13 @@ class TriggerEngine:
                                     db.add(order_log)
                                     db.commit()
                                     
+                                    now_str = datetime.now().strftime("%H:%M:%S")
                                     log_system_event(
                                         f"[매수 체결 완료] {config.stock_name} {next_step.step}단계 추가 진입 완료! "
                                         f"수량: {exec_qty}주, 단가: {exec_price}원 (총액: {exec_price * exec_qty:,.0f}원)",
                                         "INFO"
                                     )
+                                    log_execution_event(now_str, config.stock_name, "BUY", exec_price, exec_qty, "자동")
                                 else:
                                     log_system_event(
                                         f"[매수 실패] {config.stock_name} {next_step.step}단계 주문 실패: {order_res.get('message')}",
@@ -438,11 +462,13 @@ class TriggerEngine:
                     )
                     db.add(order_log)
                     
+                    now_str = datetime.now().strftime("%H:%M:%S")
                     log_system_event(
                         f"[긴급 청산 완료] {config.stock_name} 전량 청산 완료! "
                         f"수량: {exec_qty}주, 평균 체결가: {exec_price}원",
                         "WARNING"
                     )
+                    log_execution_event(now_str, config.stock_name, "SELL", exec_price, exec_qty, "수동")
                 else:
                     log_system_event(f"[긴급 청산 실패] {config.stock_name} 주문 전송 실패: {order_res.get('message')}", "ERROR")
                     success_flag = False

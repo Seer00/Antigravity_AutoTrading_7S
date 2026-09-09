@@ -12,11 +12,13 @@ from sqlalchemy.orm import Session
 import uvicorn
 import logging
 
+import json
 import config
+from config import save_config_to_env
 from database import init_db, get_db, SplitConfig, SplitState, OrderLog, EmergencyLog
 from kiwoom import KiwoomClient, KiwoomMockClient
 from engine import TriggerEngine
-from engine.trigger import log_system_event, system_log_queue
+from engine.trigger import log_system_event, system_log_queue, execution_log_queue
 
 # 로깅 기본 설정
 logging.basicConfig(
@@ -121,12 +123,112 @@ async def get_system_status():
     현재 시스템 모드와 계좌 정보를 반환합니다.
     """
     kiwoom = app_state.get("kiwoom")
+    is_logged_in = app_state.get("logged_in", True)  # 기본 로그인 활성 상태로 간주
     return {
         "simulation_mode": config.SIMULATION_MODE,
         "account_no": config.KIWOOM_ACCOUNT_NO,
         "is_mock_server": config.IS_MOCK_SERVER if not config.SIMULATION_MODE else True,
-        "connected": kiwoom is not None
+        "connected": kiwoom is not None,
+        "logged_in": is_logged_in
     }
+
+
+@app.post("/api/login")
+async def login():
+    """
+    환경설정 내 인가 정보를 바탕으로 인증/로그인을 수행합니다.
+    """
+    kiwoom = app_state.get("kiwoom")
+    if not kiwoom:
+        raise HTTPException(status_code=503, detail="API 클라이언트가 준비되지 않았습니다.")
+    
+    auth_ok = await kiwoom.authenticate()
+    if auth_ok:
+        app_state["logged_in"] = True
+        log_system_event(f"사용자 로그인 성공 (계좌: {config.KIWOOM_ACCOUNT_NO})", "INFO")
+        return {"success": True, "message": "로그인에 성공했습니다."}
+    else:
+        app_state["logged_in"] = False
+        log_system_event("로그인 실패: 환경설정의 키 및 계좌 정보를 확인하세요.", "ERROR")
+        return {"success": False, "message": "로그인 실패. 환경설정을 확인하세요."}
+
+
+@app.post("/api/logout")
+async def logout():
+    """
+    사용자 로그아웃을 처리합니다.
+    """
+    app_state["logged_in"] = False
+    log_system_event("사용자가 로그아웃하였습니다.", "INFO")
+    return {"success": True, "message": "로그아웃 되었습니다."}
+
+
+@app.get("/api/settings")
+async def get_settings():
+    """
+    현재 저장된 시스템 및 계좌 환경설정을 조회합니다.
+    """
+    return {
+        "SIMULATION_MODE": config.SIMULATION_MODE,
+        "KIWOOM_APP_KEY": config.KIWOOM_APP_KEY,
+        "KIWOOM_SECRET_KEY": config.KIWOOM_SECRET_KEY,
+        "KIWOOM_ACCOUNT_NO": config.KIWOOM_ACCOUNT_NO,
+        "IS_MOCK_SERVER": config.IS_MOCK_SERVER,
+        "PORT": config.PORT
+    }
+
+
+@app.post("/api/settings")
+async def update_settings(settings: dict = Body(...)):
+    """
+    환경 변수를 업데이트하고 .env 파일에 보관합니다.
+    """
+    try:
+        save_config_to_env(settings)
+        log_system_event("시스템 환경설정이 성공적으로 변경 및 적용되었습니다.", "INFO")
+        return {"success": True, "message": "환경설정이 저장되었습니다."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"설정 저장 중 오류: {str(e)}")
+
+
+@app.get("/api/executions")
+async def get_recent_executions(db: Session = Depends(get_db)):
+    """
+    최근 완료된 매수/매도 체결 이력을 반환합니다. (초기 렌더링용)
+    """
+    logs = db.query(OrderLog).filter(OrderLog.status == "FILLED").order_by(OrderLog.order_time.desc()).limit(50).all()
+    result = []
+    for l in logs:
+        stock_name = l.config.stock_name if l.config else "청산/기타"
+        note = "자동" if l.step is not None else "수동"
+        result.append({
+            "time": l.order_time.strftime("%H:%M:%S") if l.order_time else "",
+            "stock_name": stock_name,
+            "order_type": "매수" if l.order_type == "BUY" else "매도",
+            "price": l.executed_price,
+            "qty": l.executed_quantity,
+            "note": note
+        })
+    return result
+
+
+@app.get("/api/execution-logs")
+async def stream_execution_logs():
+    """
+    Server-Sent Events(SSE) 방식으로 실시간 체결 이벤트를 브라우저로 전송합니다.
+    """
+    async def exec_generator():
+        while True:
+            try:
+                data = await execution_log_queue.get()
+                yield f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+                execution_log_queue.task_done()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                await asyncio.sleep(2)
+
+    return StreamingResponse(exec_generator(), media_type="text/event-stream")
 
 
 @app.get("/api/balance")
